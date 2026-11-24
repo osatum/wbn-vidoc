@@ -25,9 +25,9 @@ export namespace RegistrationSubmitResultDto {
         InstitutionPending: 'INSTITUTION_PENDING' as RoleEnum,
         InstitutionToConfirm: 'INSTITUTION_TO_CONFIRM' as RoleEnum
     };
-    export type StatusEnum = 'REGISTERED_PENDING_ACTIVATION';
+    export type StatusEnum = 'ACCEPTED';
     export const StatusEnum = {
-        RegisteredPendingActivation: 'REGISTERED_PENDING_ACTIVATION' as StatusEnum
+        Accepted: 'ACCEPTED' as StatusEnum
     };
 }
 

@@ -28,6 +28,11 @@ public class LoginSessionRepositoryAdapter implements LoginSessionRepository {
     }
 
     @Override
+    public Optional<LoginSession> findByIdForUpdate(Long id) {
+        return springData.findByIdForUpdate(id);
+    }
+
+    @Override
     public List<LoginSession> findExpiredActive(Instant now) {
         return springData.findByStatusAndExpiresAtLessThanEqual(LoginSessionStatus.ACTIVE, now);
     }

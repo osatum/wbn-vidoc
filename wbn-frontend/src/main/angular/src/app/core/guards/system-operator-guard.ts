@@ -1,5 +1,5 @@
 import { inject } from '@angular/core';
-import { CanActivateFn, Router, UrlTree } from '@angular/router';
+import { CanActivateFn, UrlTree } from '@angular/router';
 import {map, Observable, of, switchMap, take} from 'rxjs';
 import {AuthService} from '../services/auth.service';
 import {UserProfileResponse} from '../backend';
@@ -35,10 +35,9 @@ export const systemOperatorGuard: CanActivateFn = (): Observable<boolean | UrlTr
     }),
 
     map(profile => {
-      if (
-        profile?.institutionType ===
-        UserProfileResponse.InstitutionTypeEnum.SystemOperator
-      ) {
+      // Panel stosuje tę samą regułę kontekstu i roli co adnotacja CanSystemManage w API.
+      if (profile?.institutionType === UserProfileResponse.InstitutionTypeEnum.SystemOperator &&
+          profile.institutionRole === UserProfileResponse.InstitutionRoleEnum.InstitutionAdmin) {
         return true;
       }
       return redirectService.redirectToDenied(profile);

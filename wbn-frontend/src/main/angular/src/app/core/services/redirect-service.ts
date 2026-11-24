@@ -98,7 +98,8 @@ export class RedirectService {
     if (UserProfileResponse.InstitutionTypeEnum.ResearchUnit === profile.institutionType){
       return this.router.createUrlTree(['/institution/user/denied'])
     }
-    if (UserProfileResponse.InstitutionTypeEnum.SystemOperator === profile.institutionType){
+    if (UserProfileResponse.InstitutionTypeEnum.SystemOperator === profile.institutionType &&
+        UserProfileResponse.InstitutionRoleEnum.InstitutionAdmin === profile.institutionRole) {
       return this.router.createUrlTree(['/system/admin/denied'])
     }
     return this.router.createUrlTree(['/denied']);

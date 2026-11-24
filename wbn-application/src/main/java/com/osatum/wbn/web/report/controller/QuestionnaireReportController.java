@@ -1,5 +1,6 @@
 package com.osatum.wbn.web.report.controller;
 
+import com.osatum.wbn.application.journal.authorization.CanJournalView;
 import com.osatum.wbn.application.report.survey.dto.QuestionnaireReportAvailabilityDto;
 import com.osatum.wbn.application.report.survey.sevice.QuestionnaireReportFileService;
 import com.osatum.wbn.application.report.survey.sevice.QuestionnaireReportFileService.QuestionnaireReportFile;
@@ -32,6 +33,8 @@ import static org.springframework.http.HttpStatus.NOT_FOUND;
 @RestController
 @RequestMapping("/api/reports/questionnaires/2024")
 @RequiredArgsConstructor
+@CanJournalView
+@ApiResponse(responseCode = "403", description = "Brak uprawnień do katalogu czasopism")
 public class QuestionnaireReportController {
     private static final MediaType XLSX_MEDIA_TYPE = MediaType.parseMediaType(
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"

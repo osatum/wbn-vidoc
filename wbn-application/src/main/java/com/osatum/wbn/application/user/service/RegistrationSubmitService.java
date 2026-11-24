@@ -3,7 +3,7 @@ package com.osatum.wbn.application.user.service;
 import com.osatum.wbn.application.user.dto.RegistrationSubmitDto;
 import com.osatum.wbn.application.user.dto.RegistrationSubmitResultDto;
 import com.osatum.wbn.application.user.dto.RegistrationSubmitStatus;
-import com.osatum.wbn.application.shared.exception.ResourceAlreadyExistsException;
+import com.osatum.wbn.application.security.PublicRequestRateLimiter;
 import com.osatum.wbn.application.shared.exception.ResourceNotFoundException;
 import com.osatum.wbn.domain.model.EntityState;
 import com.osatum.wbn.domain.model.institution.Institution;
@@ -30,15 +30,13 @@ import java.util.Set;
 @Service
 @RequiredArgsConstructor
 public class RegistrationSubmitService {
-    private static final String EXISTING_ACCOUNT_MESSAGE =
-            "Uzytkownik o podanym adresie e-mail ma juz konto. Przejdz do logowania.";
-
     private final InstitutionRepository institutionRepository;
     private final UserRepository userRepository;
     private final InstitutionMembershipRepository membershipRepository;
     private final InstitutionIpMatcherService matcher;
     private final PasswordEncoder passwordEncoder;
     private final AccountActivationService accountActivationService;
+    private final PublicRequestRateLimiter requestRateLimiter;
 
     /**
      * Rejestruje użytkownika w instytucji bez zapisu user-agenta klienta.
@@ -62,9 +60,20 @@ public class RegistrationSubmitService {
 
         String normalizedEmail = normalizeEmail(dto.getEmail());
         validateEmailDomain(institution, normalizedEmail);
-        validateEmailIsNotRegistered(normalizedEmail);
+        requestRateLimiter.consumeRegistrationAttempt(normalizedEmail);
 
-        AppUser user = userRepository.save(createUser(dto, normalizedEmail));
+        // W obu przypadkach obliczamy skrót hasła i zwracamy ACCEPTED, aby utrudnić ustalenie, czy konto istnieje.
+        String passwordHash = passwordEncoder.encode(dto.getPassword());
+        if (userRepository.findByEmail(normalizedEmail).isEmpty()) {
+            createPendingRegistration(dto, normalizedEmail, passwordHash, institution, clientIp, userAgent);
+        }
+
+        return new RegistrationSubmitResultDto(null, institution.getId(), null, null, RegistrationSubmitStatus.ACCEPTED);
+    }
+
+    private void createPendingRegistration(RegistrationSubmitDto dto, String normalizedEmail, String passwordHash,
+                                           Institution institution, String clientIp, String userAgent) {
+        AppUser user = userRepository.save(createUser(dto, normalizedEmail, passwordHash));
         InstitutionMembership membership = membershipRepository.save(createPendingMembership(user, institution));
         ActivationToken activationToken = accountActivationService.issueActivationToken(user, institution, membership, EmailType.ACCOUNT_ACTIVATION_LINK);
         accountActivationService.logRegistrationSubmit(
@@ -73,14 +82,6 @@ public class RegistrationSubmitService {
                 dto.isPersonalDataProcessingAcknowledged(),
                 clientIp,
                 userAgent
-        );
-
-        return new RegistrationSubmitResultDto(
-                user.getId(),
-                institution.getId(),
-                membership.getId(),
-                membership.getRole(),
-                RegistrationSubmitStatus.REGISTERED_PENDING_ACTIVATION
         );
     }
 
@@ -132,13 +133,6 @@ public class RegistrationSubmitService {
         }
     }
 
-    private void validateEmailIsNotRegistered(String normalizedEmail) {
-        userRepository.findByEmail(normalizedEmail)
-                .ifPresent(user -> {
-                    throw new ResourceAlreadyExistsException("email", EXISTING_ACCOUNT_MESSAGE);
-                });
-    }
-
     private void validateConsents(RegistrationSubmitDto dto) {
         if (!dto.isTermsAndPrivacyPolicyAccepted()) {
             throw new IllegalArgumentException("Terms and privacy policy acceptance is required.");
@@ -149,13 +143,13 @@ public class RegistrationSubmitService {
         }
     }
 
-    private AppUser createUser(RegistrationSubmitDto dto, String normalizedEmail) {
+    private AppUser createUser(RegistrationSubmitDto dto, String normalizedEmail, String passwordHash) {
         AppUser user = new AppUser();
         user.setEmail(normalizedEmail);
         user.setFirstName(normalizeRequired(dto.getFirstName()));
         user.setLastName(normalizeRequired(dto.getLastName()));
         user.setOrcid(normalizeNullable(dto.getOrcid()));
-        user.setPasswordHash(passwordEncoder.encode(dto.getPassword()));
+        user.setPasswordHash(passwordHash);
         user.setRoles("USER");
         user.setState(EntityState.ACTIVE);
         user.setCreatedAt(OffsetDateTime.now());

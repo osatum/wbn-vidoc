@@ -7,7 +7,11 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
-@Target(ElementType.METHOD)
+/**
+ * Wymaga roli administratora w bieżącym kontekście operatora systemowego.
+ * Na poziomie klasy obejmuje wszystkie operacje kontrolera.
+ */
+@Target({ElementType.TYPE, ElementType.METHOD})
 @Retention(RetentionPolicy.RUNTIME)
 @PreAuthorize("@systemAuthorization.canSystemManage()")
 public @interface CanSystemManage {

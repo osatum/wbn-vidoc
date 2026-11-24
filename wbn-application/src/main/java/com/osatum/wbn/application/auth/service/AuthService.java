@@ -7,6 +7,7 @@ import com.osatum.wbn.application.institution.mapper.InstitutionAccessDtoMapper;
 import com.osatum.wbn.application.institution.mapper.InstitutionMembershipAccessDtoMapper;
 import com.osatum.wbn.application.institution.dto.InstitutionAccessDto;
 import com.osatum.wbn.application.security.CurrentActorProvider;
+import com.osatum.wbn.application.security.PublicRequestRateLimiter;
 import com.osatum.wbn.application.security.UserActor;
 import com.osatum.wbn.application.shared.request.ClientRequestMetadata;
 import com.osatum.wbn.domain.model.EntityState;
@@ -53,6 +54,7 @@ public class AuthService {
     private final InstitutionAccessDtoMapper institutionAccessDtoMapper;
     private final InstitutionMembershipAccessDtoMapper institutionMembershipAccessDtoMapper;
     private final LoginSessionService loginSessionService;
+    private final PublicRequestRateLimiter requestRateLimiter;
 
     @Value("${app.security.jwt.refresh-ttl-days}")
     private long refreshTtlDays;
@@ -102,19 +104,24 @@ public class AuthService {
 
     /**
      * Weryfikuje dane logowania użytkownika i zwraca wynik logowania albo wymóg wyboru instytucji lub roli.
+     * Transakcja zapisuje licznik także wtedy, gdy użytkownik poda błędne dane logowania.
      */
-    @Transactional
+    @Transactional(noRollbackFor = BadCredentialsException.class)
     public AuthResult login(LoginRequest req, ClientRequestMetadata requestMetadata) {
+        var user = requestRateLimiter.authenticate(req.email(), requestMetadata.ipAddress(), () -> verifyCredentials(req));
+        Long institutionId = resolveInstitutionId(req);
+        log.debug("Authenticating user in institution context: {}", institutionId);
+        return getAuthResult(requestMetadata, user, institutionId, null);
+    }
+
+    private AppUser verifyCredentials(LoginRequest req) {
         var user = userRepository.findByEmail(req.email())
                 .orElseThrow(() -> new BadCredentialsException("Invalid credentials"));
         validateLoginUserCanAuthenticate(user);
-        Long institutionId = resolveInstitutionId(req);
-
         if (!passwordEncoder.matches(req.password(), user.getPasswordHash())) {
             throw new BadCredentialsException("Invalid credentials");
         }
-        log.debug("Authenticating user in institution context: {}", institutionId);
-        return getAuthResult(requestMetadata, user, institutionId, null);
+        return user;
     }
 
     /**
@@ -126,7 +133,7 @@ public class AuthService {
             String authCookie,
             ClientRequestMetadata requestMetadata
     ) {
-        long userId = resolveSelectingUserId(authCookie);
+        long userId = resolveSelectingUserId(authCookie, requestMetadata.ipAddress());
         var user = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("Invalid credentials"));
         validateUserCanAuthenticate(user);
@@ -136,12 +143,30 @@ public class AuthService {
         return getAuthResult(requestMetadata, user, institutionId, membershipId);
     }
 
-    private long resolveSelectingUserId(String authCookie) {
+    private long resolveSelectingUserId(String authCookie, String clientIp) {
+        // Zmiana instytucji wymaga ważnej sesji źródłowej. PRE_AUTH obsługuje pierwszy wybór po podaniu danych logowania.
         return currentActorProvider.findCurrentActor()
                 .filter(UserActor.class::isInstance)
                 .map(UserActor.class::cast)
-                .map(UserActor::userId)
+                .map(actor -> requireSourceSession(actor, clientIp))
                 .orElseGet(() -> preAuthTokenService.requireUserIdFromPreAuthToken(authCookie));
+    }
+
+    private long requireSourceSession(UserActor actor, String clientIp) {
+        if (!loginSessionService.isActive(actor.loginSessionId())) {
+            throw new BadCredentialsException("Inactive login session");
+        }
+
+        var membership = membershipRepository.findByUserIdAndInstitutionIdAndRole(
+                        actor.userId(), actor.institutionId(), actor.institutionRole())
+                .filter(source -> EntityState.ACTIVE.equals(source.getState()))
+                .filter(source -> canRoleAuthenticate(source.getRole()))
+                .filter(source -> EntityState.ACTIVE.equals(source.getInstitution().getState()))
+                .orElseThrow(() -> new BadCredentialsException("Inactive source membership"));
+        if (!isMembershipAllowedFromIp(membership, clientIp)) {
+            throw new IpAccessDeniedException();
+        }
+        return actor.userId();
     }
 
     private @NonNull AuthResult getAuthResult(
@@ -299,47 +324,51 @@ public class AuthService {
 
     /**
      * Weryfikuje refresh token, rotuje go i wystawia nowy access token dla aktywnej sesji.
+     * Przy odmowie dostępu z IP transakcja zapisuje unieważnienie tokenu i zakończenie sesji.
      */
-    @Transactional
+    @Transactional(noRollbackFor = IpAccessDeniedException.class)
     public AuthResult refresh(String refreshCookie, ClientRequestMetadata requestMetadata) {
         if (refreshCookie == null || refreshCookie.isBlank()) {
-            throw new IllegalArgumentException("No refresh token");
+            throw new BadCredentialsException("Missing refresh token");
         }
 
+        // Blokady tokenu i sesji pozwalają wydać najwyżej jednego następcę i skoordynować rotację z wylogowaniem.
         String hash = sha256Base64(refreshCookie);
+        var rt = refreshTokenRepository.findByTokenHashForUpdate(hash)
+                .orElseThrow(() -> new BadCredentialsException("Invalid refresh token"));
 
-
-
-        var rt = refreshTokenRepository.findByTokenHash(hash)
-                .orElseThrow(() -> new IllegalArgumentException("Invalid refresh token"));
-
-        if (rt.isRevoked() || rt.getExpiresAt().isBefore(Instant.now())) {
-            if (rt.getExpiresAt().isBefore(Instant.now())) {
-                loginSessionService.finish(rt.getLoginSession(), LoginSessionEndReason.EXPIRED);
-            }
-            throw new IllegalArgumentException("Invalid refresh token");
+        if (rt.isRevoked() || rt.getLoginSession() == null) {
+            throw new BadCredentialsException("Invalid refresh token");
+        }
+        LoginSession session = loginSessionService.findActiveForUpdate(rt.getLoginSession().getId())
+                .orElseThrow(() -> new BadCredentialsException("Inactive login session"));
+        if (!rt.getExpiresAt().isAfter(Instant.now())) {
+            throw new BadCredentialsException("Expired refresh token");
         }
 
         Institution institution = rt.getInstitution();
-
-
         if (institution == null) {
-            throw new IllegalArgumentException("Invalid refresh token");
+            throw new BadCredentialsException("Invalid refresh token");
         }
+
+        rt.setRevoked(true);
+        refreshTokenRepository.save(rt);
 
         String clientIp = requestMetadata.ipAddress();
 
         if (rt.getUser() != null) {
-            validateUserCanAuthenticate(rt.getUser());
+            if (!EntityState.ACTIVE.equals(rt.getUser().getState())) {
+                throw new BadCredentialsException("Inactive user");
+            }
 
             InstitutionMembership institutionMembership = rt.getInstitutionMembership();
 
             if (institutionMembership == null) {
-                throw new IllegalArgumentException("Invalid refresh token");
+                throw new BadCredentialsException("Invalid refresh token");
             }
 
             if (!rt.getInstitutionMembership().getInstitution().equals(rt.getInstitution())) {
-                throw new IllegalArgumentException("Invalid refresh token");
+                throw new BadCredentialsException("Invalid refresh token");
             }
             validateInstitutionCanAuthenticate(institution);
             validateMembershipCanAuthenticate(institutionMembership);
@@ -348,30 +377,23 @@ public class AuthService {
 
             // ponownie weryfikujemy ograniczenie IP (żeby nie utrzymywać sesji spoza instytucji)
             var membership = membershipRepository.findByUserIdAndInstitutionIdAndRole(rt.getUser().getId(), institution.getId(), institutionMembership.getRole())
-                    .orElseThrow(() -> new IllegalArgumentException("Invalid refresh token"));
+                    .orElseThrow(() -> new BadCredentialsException("Invalid refresh token"));
 
             validateMembershipCanAuthenticate(membership);
 
 
-            if (!membership.isLoginAllowedFromAnyIp()) {
-                boolean ok = ipMatcherService.matchesInstitution(institution.getId(), clientIp);
-                if (!ok) {
-                    revokeIpRestrictedSession(rt);
-                    throw new IllegalArgumentException("Refresh not allowed from this IP");
-                }
+            if (!isMembershipAllowedFromIp(membership, clientIp)) {
+                loginSessionService.finish(session, LoginSessionEndReason.REVOKED);
+                throw new IpAccessDeniedException();
             }
-
-            // rotacja
-            rt.setRevoked(true);
-            refreshTokenRepository.save(rt);
 
             var user = rt.getUser();
             var expiresAt = refreshExpiresAt();
-            loginSessionService.touch(rt.getLoginSession(), expiresAt);
-            var refreshToken = issueUserRefreshToken(user.getId(), membership, rt.getLoginSession(), expiresAt);
+            loginSessionService.touch(session, expiresAt);
+            var refreshToken = issueUserRefreshToken(user.getId(), membership, session, expiresAt);
 
             var response = AuthResponse.builder()
-                    .accessToken(accessTokenService.createUserAccessToken(user, institution.getId(), institution.getInstitutionType(), membership.getRole(), rt.getLoginSession().getId()))
+                    .accessToken(accessTokenService.createUserAccessToken(user, institution.getId(), institution.getInstitutionType(), membership.getRole(), session.getId()))
                     .status(AuthStatus.OK)
                     .build();
             return AuthResult.withRefreshToken(response, refreshToken);
@@ -380,18 +402,15 @@ public class AuthService {
 
             boolean ok = ipMatcherService.matchesInstitution(institution.getId(), clientIp);
             if (!ok) {
-                revokeIpRestrictedSession(rt);
-                throw new IllegalArgumentException("Refresh not allowed from this IP");
+                loginSessionService.finish(session, LoginSessionEndReason.REVOKED);
+                throw new IpAccessDeniedException();
             }
-            rt.setRevoked(true);
-            refreshTokenRepository.save(rt);
-
             var expiresAt = refreshExpiresAt();
-            loginSessionService.touch(rt.getLoginSession(), expiresAt);
-            var refreshToken = issueInstitutionRefreshToken(institution, rt.getLoginSession(), expiresAt);
+            loginSessionService.touch(session, expiresAt);
+            var refreshToken = issueInstitutionRefreshToken(institution, session, expiresAt);
 
             var response = AuthResponse.builder()
-                    .accessToken(accessTokenService.createInstitutionAccessToken(institution, institution.getInstitutionType(), InstitutionRole.INSTITUTION_VIEWER, rt.getLoginSession().getId()))
+                    .accessToken(accessTokenService.createInstitutionAccessToken(institution, institution.getInstitutionType(), InstitutionRole.INSTITUTION_VIEWER, session.getId()))
                     .status(AuthStatus.OK)
                     .build();
             return AuthResult.withRefreshToken(response, refreshToken);
@@ -406,7 +425,7 @@ public class AuthService {
     public void logout(String refreshCookie) {
         if (refreshCookie != null && !refreshCookie.isBlank()) {
             String hash = sha256Base64(refreshCookie);
-            refreshTokenRepository.findByTokenHash(hash).ifPresent(rt -> {
+            refreshTokenRepository.findByTokenHashForUpdate(hash).ifPresent(rt -> {
                 rt.setRevoked(true);
                 loginSessionService.finish(rt.getLoginSession(), LoginSessionEndReason.LOGOUT);
                 refreshTokenRepository.save(rt);
@@ -473,16 +492,16 @@ public class AuthService {
 
     private static void validateInstitutionCanAuthenticate(Institution institution) {
         if (!EntityState.ACTIVE.equals(institution.getState())) {
-            throw new IllegalArgumentException("Institution not active");
+            throw new BadCredentialsException("Institution not active");
         }
     }
 
     private static void validateMembershipCanAuthenticate(InstitutionMembership membership) {
         if (!EntityState.ACTIVE.equals(membership.getState())) {
-            throw new IllegalArgumentException("Invalid refresh token");
+            throw new BadCredentialsException("Invalid refresh token");
         }
         if (!canRoleAuthenticate(membership.getRole())) {
-            throw new IllegalArgumentException("User pending activation");
+            throw new BadCredentialsException("User pending activation");
         }
         validateInstitutionCanAuthenticate(membership.getInstitution());
     }
@@ -495,12 +514,6 @@ public class AuthService {
     private boolean isMembershipAllowedFromIp(InstitutionMembership membership, String clientIp) {
         return membership.isLoginAllowedFromAnyIp()
                 || ipMatcherService.matchesInstitution(membership.getInstitution().getId(), clientIp);
-    }
-
-    private void revokeIpRestrictedSession(RefreshToken refreshToken) {
-        refreshToken.setRevoked(true);
-        refreshTokenRepository.save(refreshToken);
-        loginSessionService.finish(refreshToken.getLoginSession(), LoginSessionEndReason.REVOKED);
     }
 
     private Instant refreshExpiresAt() {

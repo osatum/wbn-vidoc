@@ -15,6 +15,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpHeaders;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -50,6 +51,15 @@ public class IpAccessEnforcementFilter extends OncePerRequestFilter {
             return;
         }
 
+        // Nieaktywna sesja oznacza brak uwierzytelnienia (401). Odmowa dostępu z IP ma osobny status 403.
+        Long loginSessionId = loginSessionId(authentication);
+        if (loginSessionId != null && !loginSessionService.isActive(loginSessionId)) {
+            SecurityContextHolder.clearContext();
+            response.setHeader(HttpHeaders.WWW_AUTHENTICATE, "Bearer");
+            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+            return;
+        }
+
         String clientIp = requestMetadataResolutionService.resolve(new ClientRequestMetadataInput(
                 request.getRemoteAddr(),
                 request.getHeader("X-Forwarded-For"),
@@ -62,7 +72,7 @@ public class IpAccessEnforcementFilter extends OncePerRequestFilter {
             return;
         }
 
-        revokeSession(authentication);
+        revokeSession(loginSessionId);
         SecurityContextHolder.clearContext();
         response.setStatus(HttpServletResponse.SC_FORBIDDEN);
         response.setContentType("application/json");
@@ -71,15 +81,15 @@ public class IpAccessEnforcementFilter extends OncePerRequestFilter {
 
     private boolean isAccessAllowed(Authentication authentication, String clientIp) {
         return switch (authentication.getPrincipal()) {
-            case InstitutionPrincipal institutionPrincipal -> isActiveSession(institutionPrincipal.loginSessionId())
-                    && ipMatcherService.matchesInstitution(institutionPrincipal.institutionId(), clientIp);
+            case InstitutionPrincipal institutionPrincipal ->
+                    ipMatcherService.matchesInstitution(institutionPrincipal.institutionId(), clientIp);
             case UserPrincipal userPrincipal -> isUserAccessAllowed(userPrincipal, clientIp);
             default -> true;
         };
     }
 
     private boolean isUserAccessAllowed(UserPrincipal principal, String clientIp) {
-        if (!isActiveSession(principal.getLoginSessionId()) || principal.getMembershipId() == null) {
+        if (principal.getMembershipId() == null) {
             return false;
         }
 
@@ -90,22 +100,21 @@ public class IpAccessEnforcementFilter extends OncePerRequestFilter {
                 .orElse(false);
     }
 
-    private boolean isActiveSession(Long loginSessionId) {
-        return loginSessionId == null || loginSessionService.isActive(loginSessionId);
-    }
-
     private boolean belongsToPrincipal(InstitutionMembership membership, UserPrincipal principal) {
         return membership.getUser().getId().equals(principal.getUserId())
                 && membership.getInstitution().getId().equals(principal.getInstitutionId())
                 && membership.getRole() == principal.getInstitutionRole();
     }
 
-    private void revokeSession(Authentication authentication) {
-        Long loginSessionId = switch (authentication.getPrincipal()) {
+    private Long loginSessionId(Authentication authentication) {
+        return switch (authentication.getPrincipal()) {
             case InstitutionPrincipal institutionPrincipal -> institutionPrincipal.loginSessionId();
             case UserPrincipal userPrincipal -> userPrincipal.getLoginSessionId();
             default -> null;
         };
+    }
+
+    private void revokeSession(Long loginSessionId) {
         if (loginSessionId == null) {
             return;
         }

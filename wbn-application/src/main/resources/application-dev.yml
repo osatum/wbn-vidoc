@@ -8,8 +8,8 @@ spring:
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/wbn}
     driver-class-name: org.postgresql.Driver
-    username: ${SPRING_DATASOURCE_USERNAME}
-    password: ${SPRING_DATASOURCE_PASSWORD}
+    username: ${SPRING_DATASOURCE_USERNAME:wbn_app}
+    password: ${SPRING_DATASOURCE_PASSWORD:wbn_app}
   jpa:
     open-in-view: false
     hibernate:

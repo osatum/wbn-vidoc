@@ -1,16 +1,19 @@
 package com.osatum.wbn.web.error;
 
+import com.osatum.wbn.application.auth.service.IpAccessDeniedException;
 import com.osatum.wbn.application.shared.exception.ActivationTokenAlreadyUsedException;
 import com.osatum.wbn.application.journal.service.ExchangeRatesUnavailableException;
 import com.osatum.wbn.application.shared.exception.InstitutionDeletionConfirmationException;
 import com.osatum.wbn.application.shared.exception.InstitutionDeletionNotAllowedException;
 import com.osatum.wbn.application.shared.exception.ResourceAlreadyExistsException;
+import com.osatum.wbn.application.shared.exception.RequestRateLimitExceededException;
 import com.osatum.wbn.application.shared.exception.ResourceNotFoundException;
 import com.osatum.wbn.application.shared.exception.NavigationAuditReportGenerationException;
 import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.ElementKind;
 import jakarta.validation.Path;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -110,6 +113,19 @@ public class ApiExceptionHandler {
         return ResponseEntity
                 .status(HttpStatus.UNAUTHORIZED)
                 .body(ApiErrorResponse.of("AUTHENTICATION_FAILED", "Invalid credentials"));
+    }
+
+    @ExceptionHandler(RequestRateLimitExceededException.class)
+    public ResponseEntity<ApiErrorResponse> handleRateLimit(RequestRateLimitExceededException ex) {
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header(HttpHeaders.RETRY_AFTER, Long.toString(ex.retryAfterSeconds()))
+                .body(ApiErrorResponse.of("RATE_LIMITED", ex.getMessage()));
+    }
+
+    @ExceptionHandler(IpAccessDeniedException.class)
+    public ResponseEntity<ApiErrorResponse> handleIpAccessDenied(IpAccessDeniedException ex) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(ApiErrorResponse.of("IP_ACCESS_DENIED", ex.getMessage()));
     }
 
     @ExceptionHandler(ActivationTokenAlreadyUsedException.class)

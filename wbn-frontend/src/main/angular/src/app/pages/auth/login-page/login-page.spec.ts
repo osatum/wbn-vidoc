@@ -1,6 +1,8 @@
+import { HttpErrorResponse, HttpHeaders } from '@angular/common/http';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { of } from 'rxjs';
+import { TranslocoService } from '@jsverse/transloco';
+import { of, throwError } from 'rxjs';
 
 import { AuthService } from '../../../core/services/auth.service';
 import { RedirectService } from '../../../core/services/redirect-service';
@@ -37,5 +39,22 @@ describe('LoginPage', () => {
 
   it('should create', () => {
     expect(component).toBeTruthy();
+  });
+
+  it('shows the wait time after the backend throttles login', () => {
+    TestBed.inject(TranslocoService).setTranslation({
+      common: { rateLimitRetryAfter: 'Spróbuj ponownie za {{seconds}} s.' },
+    }, 'pl');
+    vi.mocked(TestBed.inject(AuthService).login).mockReturnValueOnce(throwError(() => new HttpErrorResponse({
+      status: 429,
+      headers: new HttpHeaders({ 'Retry-After': '30' }),
+      error: { code: 'RATE_LIMITED' },
+    })));
+    component.loginForm.setValue({ email: 'user@example.test', password: 'wrong-password' });
+
+    component.onSubmit();
+
+    expect(component.errorMessage()).toBe('Spróbuj ponownie za 30 s.');
+    expect(TestBed.inject(RedirectService).redirectAfterLogin).not.toHaveBeenCalled();
   });
 });

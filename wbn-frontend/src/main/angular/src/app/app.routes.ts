@@ -36,6 +36,7 @@ export const routes: Routes = [
     path: 'system',
     component: SystemLayout,
     canActivate: [systemOperatorGuard],
+    runGuardsAndResolvers: 'always',
     loadChildren: () => import('./pages/system/system-routes').then((m) => m.routes),
   }
 

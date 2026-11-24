@@ -7,7 +7,10 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
-@Target(ElementType.METHOD)
+/**
+ * Stosuje wspólną regułę dostępu do katalogu, ankiet i eksportów, żeby pobranie pliku nie omijało ograniczeń katalogu.
+ */
+@Target({ElementType.TYPE, ElementType.METHOD})
 @Retention(RetentionPolicy.RUNTIME)
 @PreAuthorize("@journalAuthorization.canJournalView()")
 public @interface CanJournalView {

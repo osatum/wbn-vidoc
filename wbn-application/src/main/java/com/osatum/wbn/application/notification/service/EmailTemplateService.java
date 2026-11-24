@@ -5,7 +5,6 @@ import com.osatum.wbn.application.notification.dto.EmailTemplateUpdateDto;
 import com.osatum.wbn.application.notification.mapper.EmailTemplateMapper;
 import com.osatum.wbn.application.shared.exception.ResourceAlreadyExistsException;
 import com.osatum.wbn.application.shared.exception.ResourceNotFoundException;
-import com.osatum.wbn.application.system.authorization.CanSystemManage;
 import com.osatum.wbn.domain.model.notification.EmailTemplate;
 import com.osatum.wbn.domain.repository.notification.EmailTemplateRepository;
 import lombok.RequiredArgsConstructor;
@@ -24,7 +23,6 @@ public class EmailTemplateService {
     /**
      * Zwraca listę szablonów e-mail posortowaną według typu wiadomości i języka.
      */
-    @CanSystemManage
     @Transactional(readOnly = true)
     public List<EmailTemplateDto> findTemplates() {
         return repository.findAllOrderByEmailTypeAndLanguage().stream()
@@ -35,7 +33,6 @@ public class EmailTemplateService {
     /**
      * Pobiera szczegóły pojedynczego szablonu e-mail.
      */
-    @CanSystemManage
     @Transactional(readOnly = true)
     public EmailTemplateDto findTemplate(Long id) {
         return mapper.toDto(findExisting(id));
@@ -44,7 +41,6 @@ public class EmailTemplateService {
     /**
      * Aktualizuje edytowalne pola szablonu e-mail po walidacji unikalności języka dla typu wiadomości.
      */
-    @CanSystemManage
     @Transactional
     public EmailTemplateDto updateTemplate(Long id, EmailTemplateUpdateDto dto) {
         EmailTemplate template = findExisting(id);

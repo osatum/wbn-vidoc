@@ -5,6 +5,7 @@ import {HttpErrorResponse} from '@angular/common/http';
 import {AuthService} from '../../../core/services/auth.service';
 import {RedirectService} from '../../../core/services/redirect-service';
 import {ToastService} from '../../../core/services/toast-service';
+import {rateLimitMessage} from '../../../core/services/rate-limit-message';
 import {ApiErrorResponse, InstitutionAccessDto} from '../../../core/backend';
 import {TranslocoDirective, TranslocoService} from '@jsverse/transloco';
 import {RouterLink} from '@angular/router';
@@ -105,7 +106,9 @@ export class LoginPage {
 
   private handleLoginError(error: HttpErrorResponse): void {
     const body = error.error as ApiErrorResponse | undefined;
-    const message = this.loginErrorMessage(body);
+    const message = error.status === 429
+      ? rateLimitMessage(error, this.transloco)
+      : this.loginErrorMessage(body);
 
     this.applyBackendFieldErrors(body?.fieldErrors ?? {});
     this.state.set({ status: 'error', error: message });

@@ -1,5 +1,6 @@
 package com.osatum.wbn.web.notification.controller;
 
+import com.osatum.wbn.application.system.authorization.CanSystemManage;
 import com.osatum.wbn.application.notification.dto.EmailMessageLogListDto;
 import com.osatum.wbn.application.notification.dto.EmailMessageResendResultDto;
 import com.osatum.wbn.application.notification.query.EmailMessageLogListQuery;
@@ -21,6 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
 @Tag(name = "EmailMessages", description = "Przegląd i ponawianie wysyłek wiadomości e-mail")
 @RestController
 @RequestMapping("/api/email-messages")
+@CanSystemManage
 @RequiredArgsConstructor
 public class EmailMessageLogController {
     private final EmailMessageLogService emailMessageLogService;

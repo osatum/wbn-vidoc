@@ -2,7 +2,8 @@ package com.osatum.wbn.application.user.service;
 
 import com.osatum.wbn.application.user.dto.RegistrationSubmitDto;
 import com.osatum.wbn.application.user.dto.RegistrationSubmitStatus;
-import com.osatum.wbn.application.shared.exception.ResourceAlreadyExistsException;
+import com.osatum.wbn.application.security.PublicRequestRateLimiter;
+import com.osatum.wbn.application.shared.exception.RequestRateLimitExceededException;
 import com.osatum.wbn.application.user.service.AccountActivationService;
 import com.osatum.wbn.application.user.service.RegistrationSubmitService;
 import com.osatum.wbn.domain.model.EntityState;
@@ -24,17 +25,20 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+import java.time.Duration;
 import java.util.Optional;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.same;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class RegistrationSubmitServiceTest {
@@ -44,6 +48,7 @@ class RegistrationSubmitServiceTest {
     private InstitutionIpMatcherService matcher;
     private PasswordEncoder passwordEncoder;
     private AccountActivationService accountActivationService;
+    private PublicRequestRateLimiter rateLimiter;
     private RegistrationSubmitService service;
 
     @BeforeEach
@@ -54,13 +59,15 @@ class RegistrationSubmitServiceTest {
         matcher = mock(InstitutionIpMatcherService.class);
         passwordEncoder = mock(PasswordEncoder.class);
         accountActivationService = mock(AccountActivationService.class);
+        rateLimiter = mock(PublicRequestRateLimiter.class);
         service = new RegistrationSubmitService(
                 institutionRepository,
                 userRepository,
                 membershipRepository,
                 matcher,
                 passwordEncoder,
-                accountActivationService
+                accountActivationService,
+                rateLimiter
         );
     }
 
@@ -92,11 +99,12 @@ class RegistrationSubmitServiceTest {
 
         var result = service.submit(registrationDto("JAN@EXAMPLE.EDU"), "192.0.2.10", "JUnit");
 
-        assertThat(result.getStatus()).isEqualTo(RegistrationSubmitStatus.REGISTERED_PENDING_ACTIVATION);
-        assertThat(result.getUserId()).isEqualTo(10L);
+        assertThat(result.getStatus()).isEqualTo(RegistrationSubmitStatus.ACCEPTED);
+        assertThat(result.getUserId()).isNull();
         assertThat(result.getInstitutionId()).isEqualTo(1L);
-        assertThat(result.getMembershipId()).isEqualTo(20L);
-        assertThat(result.getRole()).isEqualTo(InstitutionRole.INSTITUTION_PENDING);
+        assertThat(result.getMembershipId()).isNull();
+        assertThat(result.getRole()).isNull();
+        verify(rateLimiter).consumeRegistrationAttempt("jan@example.edu");
 
         ArgumentCaptor<AppUser> userCaptor = ArgumentCaptor.forClass(AppUser.class);
         verify(userRepository).save(userCaptor.capture());
@@ -126,18 +134,37 @@ class RegistrationSubmitServiceTest {
     }
 
     @Test
-    void blocksRegistrationWhenUserAlreadyExists() {
+    void acceptsRegistrationForExistingUserWithoutCreatingOrSendingAnything() {
         Institution institution = registrationInstitution();
         when(institutionRepository.findById(1L)).thenReturn(Optional.of(institution));
         when(matcher.matchesInstitution(1L, "192.0.2.10")).thenReturn(true);
         when(userRepository.findByEmail("jan@example.edu")).thenReturn(Optional.of(new AppUser()));
 
-        assertThatThrownBy(() -> service.submit(registrationDto("jan@example.edu"), "192.0.2.10"))
-                .isInstanceOf(ResourceAlreadyExistsException.class)
-                .hasMessageContaining("ma juz konto");
+        var response = service.submit(registrationDto("jan@example.edu"), "192.0.2.10");
 
+        assertThat(response.getStatus()).isEqualTo(RegistrationSubmitStatus.ACCEPTED);
+        assertThat(response.getInstitutionId()).isEqualTo(1L);
+        assertThat(response.getUserId()).isNull();
+        assertThat(response.getMembershipId()).isNull();
+        assertThat(response.getRole()).isNull();
+        verify(rateLimiter).consumeRegistrationAttempt("jan@example.edu");
+        verify(passwordEncoder).encode("secret123");
         verify(userRepository, never()).save(any(AppUser.class));
-        verify(membershipRepository, never()).save(any(InstitutionMembership.class));
+        verifyNoInteractions(membershipRepository, accountActivationService);
+    }
+
+    @Test
+    void rejectsRateLimitedEmailBeforeLookingUpTheAccount() {
+        Institution institution = registrationInstitution();
+        when(institutionRepository.findById(1L)).thenReturn(Optional.of(institution));
+        when(matcher.matchesInstitution(1L, "192.0.2.10")).thenReturn(true);
+        doThrow(new RequestRateLimitExceededException(Duration.ofMinutes(30)))
+                .when(rateLimiter).consumeRegistrationAttempt("jan@example.edu");
+
+        assertThatThrownBy(() -> service.submit(registrationDto("JAN@EXAMPLE.EDU"), "192.0.2.10"))
+                .isInstanceOf(RequestRateLimitExceededException.class);
+
+        verifyNoInteractions(userRepository, membershipRepository, accountActivationService, passwordEncoder);
     }
 
     @Test
@@ -179,7 +206,7 @@ class RegistrationSubmitServiceTest {
 
         var result = service.submit(registrationDto("jan@example.edu"), "203.0.113.10");
 
-        assertThat(result.getRole()).isEqualTo(InstitutionRole.INSTITUTION_PENDING);
+        assertThat(result.getStatus()).isEqualTo(RegistrationSubmitStatus.ACCEPTED);
         verify(matcher, never()).matchesInstitution(1L, "203.0.113.10");
     }
 
@@ -225,7 +252,7 @@ class RegistrationSubmitServiceTest {
 
         var result = service.submit(registrationDto("jan@other.edu"), "192.0.2.10");
 
-        assertThat(result.getRole()).isEqualTo(InstitutionRole.INSTITUTION_PENDING);
+        assertThat(result.getStatus()).isEqualTo(RegistrationSubmitStatus.ACCEPTED);
     }
 
     private RegistrationSubmitDto registrationDto(String email) {

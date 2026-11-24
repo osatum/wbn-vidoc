@@ -10,7 +10,9 @@ import com.osatum.wbn.domain.service.institution.InstitutionIpMatcherService;
 import com.osatum.wbn.infrastructure.persistence.springdata.InstitutionMembershipSpringDataRepository;
 import com.osatum.wbn.infrastructure.security.principal.InstitutionPrincipal;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.http.HttpHeaders;
 import org.springframework.mock.web.MockFilterChain;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
@@ -23,6 +25,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class IpAccessEnforcementFilterTest {
@@ -32,8 +35,9 @@ class IpAccessEnforcementFilterTest {
         SecurityContextHolder.clearContext();
     }
 
-    @Test
-    void rejectsInstitutionSessionOutsideAllowedNetwork() throws Exception {
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void distinguishesIpDenialFromInactiveSession(boolean sessionActive) throws Exception {
         var requestMetadataService = mock(ClientRequestMetadataResolutionService.class);
         var matcher = mock(InstitutionIpMatcherService.class);
         var membershipRepository = mock(InstitutionMembershipSpringDataRepository.class);
@@ -59,15 +63,21 @@ class IpAccessEnforcementFilterTest {
                 new UsernamePasswordAuthenticationToken(principal, null, List.of())
         );
         when(requestMetadataService.resolve(any())).thenReturn(new ClientRequestMetadata("2001:db8::10", "JUnit"));
-        when(loginSessionService.isActive(11L)).thenReturn(true);
-        when(matcher.matchesInstitution(7L, "2001:db8::10")).thenReturn(false);
+        when(loginSessionService.isActive(11L)).thenReturn(sessionActive);
         when(refreshTokenRepository.findByLoginSessionIdAndRevokedFalse(11L)).thenReturn(List.of());
 
         var response = new MockHttpServletResponse();
         filter.doFilter(new MockHttpServletRequest("GET", "/api/institution/7"), response, new MockFilterChain());
 
-        assertThat(response.getStatus()).isEqualTo(403);
-        assertThat(response.getContentAsString()).contains("IP_ACCESS_DENIED");
-        verify(loginSessionService).revoke(11L);
+        if (sessionActive) {
+            assertThat(response.getStatus()).isEqualTo(403);
+            assertThat(response.getContentAsString()).contains("IP_ACCESS_DENIED");
+            verify(loginSessionService).revoke(11L);
+        } else {
+            assertThat(response.getStatus()).isEqualTo(401);
+            assertThat(response.getHeader(HttpHeaders.WWW_AUTHENTICATE)).isEqualTo("Bearer");
+            assertThat(response.getContentAsString()).doesNotContain("IP_ACCESS_DENIED");
+            verifyNoInteractions(matcher, refreshTokenRepository);
+        }
     }
 }

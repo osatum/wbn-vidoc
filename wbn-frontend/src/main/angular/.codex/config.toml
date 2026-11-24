@@ -1,0 +1,19 @@
+model = "gpt-5.6"
+model_provider = "openai"
+model_reasoning_effort = "high"
+personality = "pragmatic"
+
+approval_policy = "never"
+sandbox_mode = "danger-full-access"
+
+web_search = "live"
+
+[windows]
+sandbox = "elevated"
+
+[shell_environment_policy]
+inherit = "all"
+
+[shell_environment_policy.set]
+JAVA_HOME = "d:\\.jdk\\jdk-25.0.3+9\\"
+PATH = "d:\\.jdk\\jdk-25.0.3+9\\bin;C:\\Windows\\System32;C:\\Windows;C:\\Windows\\System32\\WindowsPowerShell\\v1.0"

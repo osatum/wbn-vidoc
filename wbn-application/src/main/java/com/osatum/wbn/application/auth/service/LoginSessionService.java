@@ -20,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -157,11 +158,21 @@ public class LoginSessionService {
         if (sessionId == null) {
             return false;
         }
-        return repository.findById(sessionId)
-                .filter(session -> session.getStatus() == LoginSessionStatus.ACTIVE)
-                .filter(session -> session.getEndedAt() == null)
-                .filter(session -> session.getExpiresAt().isAfter(clock.instant()))
-                .isPresent();
+        return repository.findById(sessionId).filter(this::isActive).isPresent();
+    }
+
+    @Transactional
+    public Optional<LoginSession> findActiveForUpdate(Long sessionId) {
+        if (sessionId == null) {
+            return Optional.empty();
+        }
+        return repository.findByIdForUpdate(sessionId).filter(this::isActive);
+    }
+
+    private boolean isActive(LoginSession session) {
+        return session.getStatus() == LoginSessionStatus.ACTIVE
+                && session.getEndedAt() == null
+                && session.getExpiresAt().isAfter(clock.instant());
     }
 
     @Transactional

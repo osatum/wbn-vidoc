@@ -6,7 +6,7 @@ import java.util.List;
 import java.util.Optional;
 
 public interface RefreshTokenRepository {
-    Optional<RefreshToken> findByTokenHash(String tokenHash);
+    Optional<RefreshToken> findByTokenHashForUpdate(String tokenHash);
     List<RefreshToken> findByUserIdAndRevokedFalse(Long userId);
     List<RefreshToken> findByLoginSessionIdAndRevokedFalse(Long loginSessionId);
     RefreshToken save(RefreshToken token);

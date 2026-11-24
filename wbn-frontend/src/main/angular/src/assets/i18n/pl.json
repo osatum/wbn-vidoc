@@ -91,7 +91,7 @@
         "description": "Utwórz konto w wybranej instytucji naukowej",
         "processing": "Przetwarzanie danych...",
         "go-to-login": "Przejdź do logowania",
-        "success": "Formularz rejestracji został przyjęty. Sprawdź pocztę e-mail i potwierdź konto linkiem aktywacyjnym.",
+        "success": "Formularz rejestracji został przyjęty. Jeśli potrzebna jest aktywacja, otrzymasz wiadomość z linkiem.",
         "institution": "Instytucja naukowa",
         "choose-institution": "Wybierz instytucję naukową",
         "selected-institution-prefix": "Rejestrujesz konto w instytucji:",
@@ -108,7 +108,6 @@
         "no-institutions": "Instytucje dostępne do rejestracji nie są obecnie dostępne.",
         "load-institutions-error": "Nie można pobrać listy jednostek.",
         "check-availability-error": "Nie można sprawdzić dostępności rejestracji.",
-        "email-already-used": "Adres email jest już powiązany z kontem użytkownika.",
         "submit-error-with-status": "Nie udało się wysłać formularza rejestracji. Kod błędu: {{status}}.",
         "submit-error": "Nie udało się wysłać formularza rejestracji.",
         "terms": {
@@ -1752,7 +1751,9 @@
     "loading": "Ładowanie...",
     "get-report": "Pobierz raport",
     "serverError": "Wystąpił błąd serwera ({{status}}). Spróbuj ponownie później.",
-    "connectionError": "Nie można połączyć się z serwerem. Sprawdź połączenie i spróbuj ponownie."
+    "connectionError": "Nie można połączyć się z serwerem. Sprawdź połączenie i spróbuj ponownie.",
+    "rateLimit": "Zbyt wiele prób. Spróbuj ponownie później.",
+    "rateLimitRetryAfter": "Zbyt wiele prób. Spróbuj ponownie za {{seconds}} s."
   },
   "shared": {
     "cookieConsent": {

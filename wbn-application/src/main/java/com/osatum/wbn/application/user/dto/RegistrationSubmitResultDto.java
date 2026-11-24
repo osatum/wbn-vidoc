@@ -1,5 +1,6 @@
 package com.osatum.wbn.application.user.dto;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.osatum.wbn.domain.model.institution.InstitutionRole;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -10,6 +11,7 @@ import lombok.Setter;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
+@JsonInclude(JsonInclude.Include.NON_NULL)
 public class RegistrationSubmitResultDto {
     private Long userId;
     private Long institutionId;

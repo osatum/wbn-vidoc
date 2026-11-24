@@ -1,5 +1,6 @@
 package com.osatum.wbn.web.navigationaudit.controller;
 
+import com.osatum.wbn.application.system.authorization.CanSystemManage;
 import com.osatum.wbn.application.system.dto.NavigationAuditBatchDto;
 import com.osatum.wbn.application.system.dto.NavigationAuditEventListDto;
 import com.osatum.wbn.application.system.query.NavigationAuditEventListQuery;
@@ -24,7 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * Przyjmuje zdarzenia nawigacji z frontendu i udostępnia administratorowi ich stronicowaną listę.
- * Konfiguracja zabezpieczeń dopuszcza anonimowe zgłoszenia zdarzeń, ale wymaga ADMIN do wyszukiwania.
+ * Zdarzenia mogą zgłaszać także goście. Wyszukiwanie wymaga administratora operatora systemowego.
  * Akcje P2, w tym kliknięcie wydań E14, wymagają ponadto dostępu do Karty decyzji sprawdzanego w serwisie.
  * Przyjęcie paczki nie oznacza akceptacji każdego rekordu; walidacja i deduplikacja należą do warstwy usług.
  */
@@ -43,6 +44,7 @@ public class NavigationAuditController {
      * Odczyt statystyk nie zapisuje aktywności ani nie przedłuża wizyty.
      */
     @PostMapping("/search")
+    @CanSystemManage
     @Operation(
             summary = "Wyszukiwanie zdarzeń nawigacji",
             description = "Zwraca stronicowaną listę zdarzeń nawigacji użytkowników z możliwością filtrowania po dacie, instytucji, użytkowniku, stronie, typie zdarzenia oraz identyfikatorze czasopisma."

@@ -1,11 +1,15 @@
 package com.osatum.wbn.web.navigationaudit.controller;
 
+import com.osatum.wbn.application.system.authorization.SystemAuthorization;
 import com.osatum.wbn.application.system.service.*;
 import com.osatum.wbn.application.system.dto.PreparedNavigationAuditReport;
 import com.osatum.wbn.application.system.dto.NavigationAuditEventListDto;
 import com.osatum.wbn.application.shared.list.PageResult;
+import com.osatum.wbn.domain.model.institution.InstitutionRole;
+import com.osatum.wbn.domain.model.institution.InstitutionType;
 import com.osatum.wbn.web.shared.request.ClientRequestMetadataResolver;
 import com.osatum.wbn.infrastructure.security.*;
+import com.osatum.wbn.infrastructure.security.principal.UserPrincipal;
 import com.osatum.wbn.web.error.ApiExceptionHandler;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletRequest;
@@ -46,7 +50,8 @@ class NavigationAuditReportControllerTest {
     @TestConfiguration
     @EnableWebMvc
     @EnableAutoConfiguration(exclude = DataSourceAutoConfiguration.class)
-    @Import({NavigationAuditReportController.class, NavigationAuditVisitController.class, NavigationAuditController.class, ApiExceptionHandler.class, SecurityConfig.class})
+    @Import({NavigationAuditReportController.class, NavigationAuditVisitController.class, NavigationAuditController.class,
+            ApiExceptionHandler.class, SecurityConfig.class, SystemAuthorization.class, SpringSecurityCurrentActorProvider.class})
     static class Configuration {
     }
     @Autowired WebApplicationContext context;
@@ -62,7 +67,7 @@ class NavigationAuditReportControllerTest {
     @MockitoBean IpAccessEnforcementFilter ip;
     @MockitoBean LoginSessionActivityFilter activity;
     private MockMvc mvc;
-    private String authority;
+    private UsernamePasswordAuthenticationToken authentication;
     private final String body = "{\"dateFrom\":\"2026-10-03\",\"dateTo\":\"2026-10-03\",\"reportType\":\"VISITS\"}";
 
     @BeforeEach
@@ -74,9 +79,8 @@ class NavigationAuditReportControllerTest {
             }).when(filter).doFilter(any(ServletRequest.class), any(ServletResponse.class), any(FilterChain.class));
         }
         doAnswer(invocation -> {
-            if (authority != null) {
-                SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken("test", null,
-                        List.of(new SimpleGrantedAuthority(authority))));
+            if (authentication != null) {
+                SecurityContextHolder.getContext().setAuthentication(authentication);
             }
             ((FilterChain) invocation.getArgument(2)).doFilter(invocation.getArgument(0), invocation.getArgument(1));
             return null;
@@ -93,8 +97,10 @@ class NavigationAuditReportControllerTest {
     @ValueSource(strings = {"VISITS", "SERVICE_ENTRIES"})
     void deniesAnonymousAndNonAdminWithoutGeneratingFiles(String type) throws Exception {
         String request = body.replace("VISITS", type);
-        mvc.perform(post("/api/navigation-audit/reports/export").contentType("application/json").content(request)).andExpect(status().is4xxClientError());
+        mvc.perform(post("/api/navigation-audit/reports/export").contentType("application/json").content(request)).andExpect(status().isUnauthorized());
         authenticate("USER");
+        mvc.perform(post("/api/navigation-audit/reports/export").contentType("application/json").content(request)).andExpect(status().isForbidden());
+        authenticateResearchAdministrator();
         mvc.perform(post("/api/navigation-audit/reports/export").contentType("application/json").content(request)).andExpect(status().isForbidden());
         verifyNoInteractions(reports);
     }
@@ -141,6 +147,9 @@ class NavigationAuditReportControllerTest {
         authenticate("USER");
         mvc.perform(post("/api/navigation-audit/events/search").contentType("application/json").content("{}"))
                 .andExpect(status().isForbidden());
+        authenticateResearchAdministrator();
+        mvc.perform(post("/api/navigation-audit/events/search").contentType("application/json").content("{}"))
+                .andExpect(status().isForbidden());
         verifyNoInteractions(eventQueries);
         authenticate("ADMIN");
         var event = new NavigationAuditEventListDto();
@@ -184,7 +193,23 @@ class NavigationAuditReportControllerTest {
     }
 
     private void authenticate(String authority) {
-        this.authority = authority;
+        var role = "ADMIN".equals(authority) ? InstitutionRole.INSTITUTION_ADMIN : InstitutionRole.INSTITUTION_VIEWER;
+        authenticate(InstitutionType.SYSTEM_OPERATOR, role, "USER");
+    }
+
+    private void authenticateResearchAdministrator() {
+        authenticate(InstitutionType.RESEARCH_UNIT, InstitutionRole.INSTITUTION_ADMIN, "ADMIN");
+    }
+
+    private void authenticate(InstitutionType type, InstitutionRole role, String globalAuthority) {
+        var principal = UserPrincipal.builder()
+                .userId(1L)
+                .institutionId(type == InstitutionType.SYSTEM_OPERATOR ? 2L : 3L)
+                .institutionType(type)
+                .institutionRole(role)
+                .build();
+        authentication = new UsernamePasswordAuthenticationToken(
+                principal, null, List.of(new SimpleGrantedAuthority(globalAuthority)));
     }
 
     @Test
@@ -192,6 +217,9 @@ class NavigationAuditReportControllerTest {
         mvc.perform(post("/api/navigation-audit/visits/search").contentType("application/json").content("{}"))
                 .andExpect(status().is4xxClientError());
         authenticate("USER");
+        mvc.perform(post("/api/navigation-audit/visits/search").contentType("application/json").content("{}"))
+                .andExpect(status().isForbidden());
+        authenticateResearchAdministrator();
         mvc.perform(post("/api/navigation-audit/visits/search").contentType("application/json").content("{}"))
                 .andExpect(status().isForbidden());
         verifyNoInteractions(visitQueries);

@@ -91,7 +91,7 @@
         "description": "Create an account at the selected scientific institution",
         "processing": "Processing data...",
         "go-to-login": "Go to login",
-        "success": "The registration form has been accepted. Check your email and confirm your account using the activation link.",
+        "success": "Your registration request has been accepted. If activation is needed, you will receive an email with a link.",
         "institution": "Scientific institution",
         "choose-institution": "Select a scientific institution",
         "selected-institution-prefix": "You are registering an account at:",
@@ -108,7 +108,6 @@
         "no-institutions": "Institutions available for registration are currently unavailable.",
         "load-institutions-error": "Failed to load the list of institutions.",
         "check-availability-error": "Failed to check registration availability.",
-        "email-already-used": "The email address is already associated with a user account.",
         "submit-error-with-status": "Failed to submit the registration form. Error code: {{status}}.",
         "submit-error": "Failed to submit the registration form.",
         "terms": {
@@ -1752,7 +1751,9 @@
     "loading": "Loading...",
     "get-report": "Download report",
     "serverError": "A server error occurred ({{status}}). Please try again later.",
-    "connectionError": "Cannot connect to the server. Check your connection and try again."
+    "connectionError": "Cannot connect to the server. Check your connection and try again.",
+    "rateLimit": "Too many attempts. Try again later.",
+    "rateLimitRetryAfter": "Too many attempts. Try again in {{seconds}} seconds."
   },
   "shared": {
     "cookieConsent": {

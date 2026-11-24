@@ -15,6 +15,7 @@ import {
   RegistrationSubmitForm,
 } from '../../../core/backend';
 import {LocalSpinner} from '../../../shared/local-spinner/local-spinner';
+import {rateLimitMessage} from '../../../core/services/rate-limit-message';
 
 type RegistrationField =
   | 'email'
@@ -54,7 +55,6 @@ export class RegistrationPage implements OnInit {
   readonly success = signal(false);
   readonly errorMessage = signal<string | null>(null);
   readonly fieldErrors = signal<Record<string, string>>({});
-  readonly existingAccountError = signal(false);
 
   readonly showInstitutionChoice = computed(() => !this.routeHasInstitution());
   readonly showRegistrationForm = computed(() =>
@@ -120,7 +120,6 @@ export class RegistrationPage implements OnInit {
 
     this.submitted = true;
     this.errorMessage.set(null);
-    this.existingAccountError.set(false);
     this.clearBackendFieldErrors();
 
     if (this.registrationForm.invalid) {
@@ -239,13 +238,12 @@ export class RegistrationPage implements OnInit {
     const body = this.apiError(error);
 
     this.applyBackendFieldErrors(body?.fieldErrors ?? {});
-    this.existingAccountError.set(this.isEmailAlreadyUsedError(error, body));
     this.errorMessage.set(this.registrationErrorMessage(error, body));
   }
 
   private registrationErrorMessage(error: HttpErrorResponse, body: ApiErrorResponse | undefined): string {
-    if (this.isEmailAlreadyUsedError(error, body)) {
-      return this.transloco.translate('page.home.registration.email-already-used');
+    if (error.status === 429) {
+      return rateLimitMessage(error, this.transloco);
     }
 
     if (error.status >= 500) {
@@ -263,11 +261,6 @@ export class RegistrationPage implements OnInit {
     }
 
     return body?.message ?? this.transloco.translate('page.home.registration.submit-error');
-  }
-
-  private isEmailAlreadyUsedError(error: HttpErrorResponse, body: ApiErrorResponse | undefined): boolean {
-    return body?.code === 'RESOURCE_ALREADY_EXISTS'
-      || error.status === 409;
   }
 
   private availabilityMessage(reason: RegistrationAvailabilityDto.ReasonEnum | undefined): string {

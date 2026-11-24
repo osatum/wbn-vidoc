@@ -1,5 +1,6 @@
 package com.osatum.wbn.web.auth.controller;
 
+import com.osatum.wbn.application.system.authorization.CanSystemManage;
 import com.osatum.wbn.application.auth.dto.LoginSessionViewDto;
 import com.osatum.wbn.application.auth.query.LoginSessionListQuery;
 import com.osatum.wbn.application.auth.service.LoginSessionService;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.*;
 @Tag(name = "AuthSessions", description = "Przegląd sesji logowania użytkowników i instytucji")
 @RestController
 @RequestMapping("/api/auth-sessions")
+@CanSystemManage
 @RequiredArgsConstructor
 @Slf4j
 public class AuthSessionController {

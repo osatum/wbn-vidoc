@@ -56,6 +56,16 @@ describe('sessionActivityInterceptor', () => {
     expect(sessionActivity.secondsUntilTokenExpiration).toHaveBeenCalledWith('token');
   });
 
+  it('ignores successful API responses from a different origin', () => {
+    const url = 'https://outside.example.test/api/status';
+    http.get(url).subscribe();
+
+    httpMock.expectOne(url).flush({});
+
+    expect(sessionActivity.markBackendActivity).not.toHaveBeenCalled();
+    expect(auth.refreshOnce).not.toHaveBeenCalled();
+  });
+
   it('should not mark navigation audit batch response as session activity', () => {
     http.post('/api/navigation-audit/events/batch', { events: [] }).subscribe();
 

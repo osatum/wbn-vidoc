@@ -62,7 +62,8 @@ class DictionaryMniswDisciplinePersistenceTest {
                         "V7__add_exchange_rates.sql", "V8__add_journal_search_audit_retention_index.sql",
                         "V9__add_institution_operating_profile.sql", "V10__add_decision_analytics.sql",
                         "V11__add_decision_audit_retention_index.sql", "V12__persist_decision_benchmarks.sql",
-                        "V13__invalidate_p2_fee_benchmarks.sql", "V14__add_journal_issues_audit_retention_index.sql");
+                        "V13__invalidate_p2_fee_benchmarks.sql", "V14__add_journal_issues_audit_retention_index.sql",
+                        "V15__add_public_request_rate_limits.sql");
     }
 
     @AfterEach

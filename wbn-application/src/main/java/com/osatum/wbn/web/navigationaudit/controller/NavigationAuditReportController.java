@@ -1,5 +1,6 @@
 package com.osatum.wbn.web.navigationaudit.controller;
 
+import com.osatum.wbn.application.system.authorization.CanSystemManage;
 import com.osatum.wbn.application.shared.exception.NavigationAuditReportGenerationException;
 import com.osatum.wbn.application.system.dto.NavigationAuditReportRequest;
 import com.osatum.wbn.application.system.dto.PreparedNavigationAuditReport;
@@ -30,6 +31,7 @@ import java.nio.file.Files;
  */
 @RestController
 @RequestMapping("/api/navigation-audit/reports")
+@CanSystemManage
 @RequiredArgsConstructor
 @Tag(name = "NavigationAuditReports")
 public class NavigationAuditReportController {

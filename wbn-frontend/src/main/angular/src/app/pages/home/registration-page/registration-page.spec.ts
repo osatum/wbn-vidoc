@@ -1,6 +1,6 @@
 import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {ActivatedRoute, convertToParamMap, provideRouter} from '@angular/router';
-import {HttpErrorResponse} from '@angular/common/http';
+import {HttpErrorResponse, HttpHeaders} from '@angular/common/http';
 import {of, throwError} from 'rxjs';
 import {TranslocoTestingModule} from '@jsverse/transloco';
 
@@ -14,13 +14,14 @@ const translocoTestingModule = TranslocoTestingModule.forRoot({
         home: {
           registration: {
             'no-institutions': 'Instytucje dostępne do rejestracji nie są obecnie dostępne.',
-            'email-already-used': 'Adres e-mail jest już zajęty.',
+            'success': 'Formularz rejestracji został przyjęty.',
           },
         },
       },
       common: {
         serverError: 'Wystąpił błąd serwera ({{status}}). Spróbuj ponownie później.',
         connectionError: 'Nie można połączyć się z serwerem. Sprawdź połączenie i spróbuj ponownie.',
+        rateLimitRetryAfter: 'Zbyt wiele prób. Spróbuj ponownie za {{seconds}} s.',
       },
     },
   },
@@ -46,7 +47,7 @@ describe('RegistrationPage', () => {
     registrationService = {
       findGeneralRegistrationInstitutions: vi.fn(() => of([])),
       validateRegistrationStart: vi.fn(() => of({allowed: true, institution: {id: 1, name: 'Jednostka'}})),
-      submitRegistration: vi.fn(() => of({status: 'REGISTERED_PENDING_ACTIVATION'})),
+      submitRegistration: vi.fn(() => of({status: 'ACCEPTED'})),
     };
 
     await TestBed.configureTestingModule({
@@ -84,16 +85,11 @@ describe('RegistrationPage', () => {
     expect(fixture.nativeElement.querySelector('#password')).toBeNull();
   });
 
-  it('should show occupied email message for conflict response', async () => {
+  it('shows the wait time when registration reaches the request limit', async () => {
     registrationService.submitRegistration.mockReturnValueOnce(throwError(() => new HttpErrorResponse({
-      status: 409,
-      error: {
-        code: 'RESOURCE_ALREADY_EXISTS',
-        message: 'Uzytkownik o podanym adresie e-mail ma juz konto.',
-        fieldErrors: {
-          email: 'Uzytkownik o podanym adresie e-mail ma juz konto.',
-        },
-      },
+      status: 429,
+      headers: new HttpHeaders({'Retry-After': '90'}),
+      error: {code: 'RATE_LIMITED'},
     })));
     selectInstitution();
     fillValidForm('jan@example.edu');
@@ -102,9 +98,9 @@ describe('RegistrationPage', () => {
     fixture.detectChanges();
     await fixture.whenStable();
 
-    expect(component.existingAccountError()).toBe(true);
-    expect(component.errorMessage()).toContain('Adres e-mail jest już zajęty');
-    expect(component.fieldError('email')).toContain('ma juz konto');
+    expect(component.success()).toBe(false);
+    expect(component.errorMessage()).toBe('Zbyt wiele prób. Spróbuj ponownie za 90 s.');
+    expect(component.fieldError('email')).toBeNull();
   });
 
   it('should show server status for 500 response', async () => {
@@ -119,7 +115,6 @@ describe('RegistrationPage', () => {
     fixture.detectChanges();
     await fixture.whenStable();
 
-    expect(component.existingAccountError()).toBe(false);
     expect(component.errorMessage()).toContain('błąd serwera (500)');
   });
 

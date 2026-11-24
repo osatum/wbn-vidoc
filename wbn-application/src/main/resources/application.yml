@@ -95,6 +95,19 @@ app:
     url-template: ${APP_PASSWORD_RESET_URL_TEMPLATE:http://localhost:4201/auth/password-reset/confirm/{token}}
     rate-limit-window-minutes: ${APP_PASSWORD_RESET_RATE_LIMIT_WINDOW_MINUTES:15}
     rate-limit-max-requests: ${APP_PASSWORD_RESET_RATE_LIMIT_MAX_REQUESTS:3}
+  public-request-limits:
+    login:
+      max-failures: ${APP_LOGIN_RATE_LIMIT_MAX_FAILURES:5}
+      window-minutes: ${APP_LOGIN_RATE_LIMIT_WINDOW_MINUTES:15}
+      initial-delay-seconds: ${APP_LOGIN_RATE_LIMIT_INITIAL_DELAY_SECONDS:30}
+      max-delay-seconds: ${APP_LOGIN_RATE_LIMIT_MAX_DELAY_SECONDS:300}
+      ip-observation-threshold: ${APP_LOGIN_IP_OBSERVATION_THRESHOLD:100}
+      ip-observation-window-minutes: ${APP_LOGIN_IP_OBSERVATION_WINDOW_MINUTES:5}
+    registration:
+      max-submissions: ${APP_REGISTRATION_RATE_LIMIT_MAX_SUBMISSIONS:3}
+      window-minutes: ${APP_REGISTRATION_RATE_LIMIT_WINDOW_MINUTES:30}
+      ip-observation-threshold: ${APP_REGISTRATION_IP_OBSERVATION_THRESHOLD:60}
+      ip-observation-window-minutes: ${APP_REGISTRATION_IP_OBSERVATION_WINDOW_MINUTES:15}
   user-data-deletion:
     url-template: ${APP_USER_DATA_DELETION_URL_TEMPLATE:http://localhost:4201/auth/delete-my-data/confirm/{token}}
   institution-deletion:

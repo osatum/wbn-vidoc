@@ -40,6 +40,8 @@ public class AuthController {
             content = @Content(mediaType = "application/json", schema = @Schema(implementation = ApiErrorResponse.class)))
     @ApiResponse(responseCode = "401", description = "Nieprawidłowe dane logowania",
             content = @Content(mediaType = "application/json", schema = @Schema(implementation = ApiErrorResponse.class)))
+    @ApiResponse(responseCode = "429", description = "Limit prób logowania. Retry-After podaje czas oczekiwania w sekundach.",
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = ApiErrorResponse.class)))
     @ApiResponse(responseCode = "500", description = "Błąd podczas logowania")
     public AuthResponse login(@Valid @RequestBody LoginRequest req, HttpServletRequest request, HttpServletResponse response) {
         var result = authService.login(req, requestMetadataResolver.resolve(request));
@@ -56,6 +58,8 @@ public class AuthController {
     @ApiResponse(responseCode = "400", description = "Nieprawidłowy wybór instytucji, roli lub powiązania",
             content = @Content(mediaType = "application/json", schema = @Schema(implementation = ApiErrorResponse.class)))
     @ApiResponse(responseCode = "401", description = "Brak prawidłowego tokenu preautoryzacyjnego lub aktywnego tokenu dostępu użytkownika")
+    @ApiResponse(responseCode = "403", description = "Adres IP nie spełnia reguł instytucji sesji źródłowej",
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = ApiErrorResponse.class)))
     public AuthResponse selectInstitution(@Valid @RequestBody SelectInstitutionAndRoleRequest req,
                                           @CookieValue(name = AuthCookieWriter.PRE_AUTH, required = false) String authCookie,
                                           HttpServletRequest request,
@@ -71,7 +75,9 @@ public class AuthController {
     )
     @ApiResponse(responseCode = "200", description = "Token dostępu został odświeżony",
             content = @Content(mediaType = "application/json", schema = @Schema(implementation = AuthResponse.class)))
-    @ApiResponse(responseCode = "400", description = "Brak, nieprawidłowy lub niedozwolony refresh token",
+    @ApiResponse(responseCode = "401", description = "Brak ważnego refresh tokenu lub aktywnej sesji",
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = ApiErrorResponse.class)))
+    @ApiResponse(responseCode = "403", description = "Adres IP nie spełnia reguł instytucji",
             content = @Content(mediaType = "application/json", schema = @Schema(implementation = ApiErrorResponse.class)))
     public AuthResponse refresh(
             @CookieValue(name = AuthCookieWriter.REFRESH_TOKEN, required = false) String refreshCookie,

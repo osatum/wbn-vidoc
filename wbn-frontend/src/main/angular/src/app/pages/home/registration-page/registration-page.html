@@ -16,9 +16,6 @@
             @if (errorMessage()) {
               <div class="alert alert-danger" role="alert">
                 {{ errorMessage() }}
-                @if (existingAccountError()) {
-                  <a routerLink="/auth/login" class="alert-link ms-1">{{ 'page.home.registration.go-to-login' | transloco }}</a>
-                }
               </div>
             }
 

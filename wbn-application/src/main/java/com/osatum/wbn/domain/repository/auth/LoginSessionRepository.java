@@ -10,6 +10,7 @@ public interface LoginSessionRepository {
     LoginSession save(LoginSession session);
 
     Optional<LoginSession> findById(Long id);
+    Optional<LoginSession> findByIdForUpdate(Long id);
 
     List<LoginSession> findExpiredActive(Instant now);
 

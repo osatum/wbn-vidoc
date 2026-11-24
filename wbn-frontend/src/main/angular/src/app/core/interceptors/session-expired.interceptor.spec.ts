@@ -73,4 +73,32 @@ describe('sessionExpiredInterceptor', () => {
     expect(authService.clearSession).toHaveBeenCalledTimes(1);
     expect(router.navigate).toHaveBeenCalledWith(['/']);
   });
+
+  it('passes through a permission denial without retrying or clearing the session', () => {
+    const request = new HttpRequest('POST', '/api/restricted-operation', {});
+    const denied = new HttpErrorResponse({ status: 403 });
+    const next = vi.fn<HttpHandlerFn>(() => throwError(() => denied));
+    const error = vi.fn();
+
+    TestBed.runInInjectionContext(() => sessionExpiredInterceptor(request, next).subscribe({ error }));
+
+    expect(error).toHaveBeenCalledWith(denied);
+    expect(next).toHaveBeenCalledExactlyOnceWith(request);
+    expect(authService.refreshOnce).not.toHaveBeenCalled();
+    expect(authService.clearSession).not.toHaveBeenCalled();
+    expect(router.navigate).not.toHaveBeenCalled();
+  });
+
+  it('preserves the local session after an unauthorized response from another origin', () => {
+    const request = new HttpRequest('GET', 'https://outside.example.test/api/profile');
+    const denied = new HttpErrorResponse({ status: 401 });
+    const next = vi.fn<HttpHandlerFn>(() => throwError(() => denied));
+    const error = vi.fn();
+
+    TestBed.runInInjectionContext(() => sessionExpiredInterceptor(request, next).subscribe({ error }));
+
+    expect(error).toHaveBeenCalledWith(denied);
+    expect(authService.clearSession).not.toHaveBeenCalled();
+    expect(router.navigate).not.toHaveBeenCalled();
+  });
 });

@@ -1,11 +1,16 @@
 import { HttpInterceptorFn } from '@angular/common/http';
 import {AuthService} from '../services/auth.service';
 import {inject} from '@angular/core';
-import {isPublicApiRequest} from './public-api-paths';
+import {getTrustedApiPath, isPublicApiRequest} from './api-paths';
 
 let lastLoadedToken: string | null = null;   // token przy którym pobrano userContext
 
 export const loadUserInterceptor: HttpInterceptorFn = (req, next) => {
+  const apiPath = getTrustedApiPath(req.url);
+  if (apiPath === null) {
+    return next(req);
+  }
+
   const auth = inject(AuthService);
   const token = auth.token();
 
@@ -20,8 +25,8 @@ export const loadUserInterceptor: HttpInterceptorFn = (req, next) => {
     return stream$;
   }
 
-  // jeśli żądanie to /auth/me → nie wywołujemy loadUserContext (zapobiega pętli)
-  if (req.url.endsWith('/auth/me') || isPublicApiRequest(req.url)) {
+  // Ścieżki uwierzytelniania są wyłączone z automatycznego ładowania profilu, aby uniknąć pętli na /api/auth/me.
+  if (isPublicApiRequest(apiPath)) {
     return stream$;
   }
 

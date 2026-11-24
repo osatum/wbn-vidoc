@@ -20,6 +20,8 @@ import com.osatum.wbn.domain.repository.registration.AccountActivationLogReposit
 import com.osatum.wbn.domain.repository.registration.ActivationTokenRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -35,10 +37,12 @@ import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.isNull;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.notNull;
 import static org.mockito.Mockito.same;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class AccountActivationServiceTest {
@@ -144,6 +148,27 @@ class AccountActivationServiceTest {
         assertThat(newTokenCaptor.getValue()).isNotSameAs(token);
         assertThat(newTokenCaptor.getValue().getStatus()).isEqualTo(ActivationTokenStatus.ACTIVE);
         assertActivationLogs(AccountActivationStatus.FAILED_TOKEN_EXPIRED, AccountActivationStatus.NEW_TOKEN_GENERATED);
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void invalidatedLinkCannotActivateMembershipOrSendNewLink(boolean expired) {
+        ActivationToken token = activeToken(true);
+        token.setStatus(ActivationTokenStatus.INVALIDATED);
+        token.setExpiresAt(expired ? NOW.minusSeconds(1) : NOW.plusSeconds(1));
+        when(activationTokenRepository.findByTokenHash(AccountActivationService.tokenHash(RAW_TOKEN)))
+                .thenReturn(Optional.of(token));
+
+        assertThatThrownBy(() -> service.activate(RAW_TOKEN, "192.0.2.10", "JUnit"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Activation token is invalid.");
+
+        assertThat(token.getStatus()).isEqualTo(ActivationTokenStatus.INVALIDATED);
+        assertThat(token.getUsedAt()).isNull();
+        assertThat(token.getMembership().getRole()).isEqualTo(InstitutionRole.INSTITUTION_PENDING);
+        assertThat(token.getMembership().getActivatedAt()).isNull();
+        verify(activationTokenRepository, never()).save(any());
+        verifyNoInteractions(emailNotificationService);
     }
 
     @Test

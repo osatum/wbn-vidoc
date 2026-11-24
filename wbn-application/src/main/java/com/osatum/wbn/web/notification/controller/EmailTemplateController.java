@@ -1,5 +1,6 @@
 package com.osatum.wbn.web.notification.controller;
 
+import com.osatum.wbn.application.system.authorization.CanSystemManage;
 import com.osatum.wbn.application.notification.dto.EmailTemplateDto;
 import com.osatum.wbn.application.notification.dto.EmailTemplateUpdateDto;
 import com.osatum.wbn.application.notification.service.EmailTemplateService;
@@ -23,6 +24,7 @@ import java.util.List;
 @RestController
 @Tag(name = "EmailTemplates", description = "Zarządzanie globalnymi szablonami wiadomości e-mail")
 @RequestMapping("/api/email-templates")
+@CanSystemManage
 @RequiredArgsConstructor
 public class EmailTemplateController {
     private final EmailTemplateService emailTemplateService;

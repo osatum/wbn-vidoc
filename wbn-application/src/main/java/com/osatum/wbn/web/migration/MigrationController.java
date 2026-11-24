@@ -1,5 +1,6 @@
 package com.osatum.wbn.web.migration;
 
+import com.osatum.wbn.application.system.authorization.CanSystemManage;
 import com.osatum.wbn.migration.dto.MigrationImportStatusDto;
 import com.osatum.wbn.migration.service.MigrationImportRunnerService;
 import com.osatum.wbn.migration.service.QuestionnaireReportJobService;
@@ -17,9 +18,11 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * Uruchamia i monitoruje zadania zasilenia danych oraz niezależne generowanie raportów ankiet.
- * Pełny import zastępuje dane i odbudowuje indeks; odczyt statusu nie uruchamia kolejnego przebiegu.
+ * Pełny import zastępuje dane i odbudowuje indeks. Do uruchamiania zadań służy POST, a GET odczytuje ich status.
+ * Odczyt statusu i uruchomienie obu zadań wymagają uprawnień administratora operatora systemowego.
  */
 @Tag(name = "Migration", description = "Ręczne uruchamianie i monitorowanie importu danych migracyjnych")
+@ApiResponse(responseCode = "403", description = "Wymagany administrator operatora systemowego")
 @RestController
 @RequestMapping("/api/migration")
 @RequiredArgsConstructor
@@ -29,6 +32,7 @@ public class MigrationController {
     private final ObjectProvider<QuestionnaireReportJobService> questionnaireReportJobService;
 
     @PostMapping("/import")
+    @CanSystemManage
     @Operation(
             summary = "Uruchomienie importu migracyjnego",
             description = "Rozpoczyna asynchroniczny import danych migracyjnych, jeżeli mechanizm migracji jest dostępny w aktualnej konfiguracji aplikacji."
@@ -40,19 +44,8 @@ public class MigrationController {
         return migrationService().startImport();
     }
 
-    @GetMapping("/import")
-    @Operation(
-            summary = "Uruchomienie importu migracyjnego metodą GET",
-            description = "Uruchamia import migracyjny przez endpoint GET zachowany dla zgodności z istniejącymi wywołaniami administracyjnymi."
-    )
-    @ApiResponse(responseCode = "200", description = "Zwrócono status uruchomienia importu",
-            content = @Content(mediaType = "application/json", schema = @Schema(implementation = MigrationImportStatusDto.class)))
-    @ApiResponse(responseCode = "500", description = "Import migracyjny jest niedostępny lub nie mógł zostać uruchomiony")
-    public MigrationImportStatusDto startImportFromGet() {
-        return migrationService().startImport();
-    }
-
     @GetMapping("/import/status")
+    @CanSystemManage
     @Operation(
             summary = "Status importu migracyjnego",
             description = "Zwraca bieżący status importu migracyjnego, w tym informację o aktywnym lub zakończonym przebiegu."
@@ -65,6 +58,7 @@ public class MigrationController {
     }
 
     @PostMapping("/questionnaire-report-2024")
+    @CanSystemManage
     @Operation(
             summary = "Uruchomienie raportu ankiet 2024",
             description = "Rozpoczyna asynchroniczne generowanie polskiej i angielskiej wersji raportu XLSX bez uruchamiania importu migracyjnego."
@@ -77,6 +71,7 @@ public class MigrationController {
     }
 
     @GetMapping("/questionnaire-report-2024/status")
+    @CanSystemManage
     @Operation(
             summary = "Status raportu ankiet 2024",
             description = "Zwraca biezacy status oddzielnego jobu generujacego raporty XLSX ankiet 2024."

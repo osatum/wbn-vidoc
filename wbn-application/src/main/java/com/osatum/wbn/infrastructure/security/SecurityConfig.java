@@ -1,11 +1,13 @@
 package com.osatum.wbn.infrastructure.security;
 
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.security.autoconfigure.web.servlet.PathRequest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
@@ -40,6 +42,10 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .cors(Customizer.withDefaults())
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .exceptionHandling(exceptions -> exceptions.authenticationEntryPoint((request, response, error) -> {
+                    response.setHeader(HttpHeaders.WWW_AUTHENTICATE, "Bearer");
+                    response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                }))
                 .authorizeHttpRequests(reg -> {
                     reg.requestMatchers(HttpMethod.OPTIONS, "/**").permitAll();
 
@@ -57,7 +63,6 @@ public class SecurityConfig {
                                     "/api/user-data-deletion/**",
                                     "/api/user-data-deletion/verify/**",
                                     "/api/user-data-deletion/confirm/**",
-                                    "/api/migration/import",
                                     "/api/password-reset/request",
                                     "/api/navigation-audit/events/batch"
                             )
@@ -67,15 +72,8 @@ public class SecurityConfig {
                         reg.requestMatchers(PathRequest.toH2Console()).permitAll();
                     }
 
-                    reg.requestMatchers("/api/auth-sessions/**").hasAuthority("ADMIN");
-                    reg.requestMatchers("/api/account-activations/**").hasAuthority("ADMIN");
                     reg.requestMatchers("/api/password-reset-requests/**").hasAuthority("ADMIN");
                     reg.requestMatchers("/api/user-data-deletion-requests/**").hasAuthority("ADMIN");
-                    reg.requestMatchers("/api/email-messages/**").hasAuthority("ADMIN");
-                    reg.requestMatchers("/api/email-templates/**").hasAuthority("ADMIN");
-                    reg.requestMatchers(HttpMethod.POST, "/api/navigation-audit/events/search").hasAuthority("ADMIN");
-                    reg.requestMatchers(HttpMethod.POST, "/api/navigation-audit/visits/search").hasAuthority("ADMIN");
-                    reg.requestMatchers("/api/navigation-audit/reports/**").hasAuthority("ADMIN");
                     reg.requestMatchers("/api/admin/**").hasRole("ADMIN");
                     reg.anyRequest().authenticated();
                 })

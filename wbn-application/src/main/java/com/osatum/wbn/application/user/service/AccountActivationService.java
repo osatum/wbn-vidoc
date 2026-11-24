@@ -115,7 +115,9 @@ public class AccountActivationService {
             throw new IllegalArgumentException("Activation token is required.");
         }
 
+        // Unieważniony link odrzucamy przed ścieżką, która dla wygasłych linków zleca ponowną wysyłkę.
         ActivationToken token = activationTokenRepository.findByTokenHash(tokenHash(rawToken))
+                .filter(candidate -> candidate.getStatus() != ActivationTokenStatus.INVALIDATED)
                 .orElseThrow(() -> {
                     logAttempt(null, AccountActivationStatus.FAILED_TOKEN_NOT_FOUND, clientIp, userAgent, "Activation token not found.");
                     return new IllegalArgumentException("Activation token is invalid.");

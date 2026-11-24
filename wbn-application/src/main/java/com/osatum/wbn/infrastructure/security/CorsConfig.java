@@ -3,6 +3,7 @@ package com.osatum.wbn.infrastructure.security;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpHeaders;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -34,6 +35,8 @@ public class CorsConfig {
                 "X-Requested-With"
         ));
         cfg.setAllowCredentials(true);
+        // Frontend odczytuje czas oczekiwania po odpowiedzi 429 także przy żądaniach CORS.
+        cfg.setExposedHeaders(List.of(HttpHeaders.RETRY_AFTER));
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", cfg);

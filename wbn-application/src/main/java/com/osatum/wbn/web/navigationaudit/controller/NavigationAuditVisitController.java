@@ -1,5 +1,6 @@
 package com.osatum.wbn.web.navigationaudit.controller;
 
+import com.osatum.wbn.application.system.authorization.CanSystemManage;
 import com.osatum.wbn.application.system.dto.NavigationVisitActivityDto;
 import com.osatum.wbn.application.system.dto.NavigationAuditVisitPageResult;
 import com.osatum.wbn.application.system.query.NavigationAuditVisitListQuery;
@@ -13,8 +14,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 /**
- * Udostępnia wyszukiwanie wizyt dla administratora oraz przyjmowanie aktywności zalogowanego aktora.
- * Uprawnienia do poszczególnych endpointów egzekwuje konfiguracja zabezpieczeń aplikacji.
+ * Udostępnia wyszukiwanie wizyt administratorowi operatora i przyjmuje aktywność zalogowanego aktora.
  */
 @RestController
 @RequestMapping("/api/navigation-audit/visits")
@@ -26,11 +26,12 @@ public class NavigationAuditVisitController {
 
     /**
      * Zwraca stronę wizyt z uwzględnieniem filtrów, bez aktualizowania ich aktywności.
-     * Brak treści żądania oznacza domyślne parametry wyszukiwania. Dostęp wymaga uprawnienia ADMIN.
+     * Brak treści żądania oznacza domyślne parametry wyszukiwania.
      * Nagłówek no-store zapobiega przechowywaniu odpowiedzi z danymi audytowymi w pamięci podręcznej.
      */
     @PostMapping(value = "/search", produces = "application/json")
-    @Operation(operationId = "findNavigationAuditVisits", summary = "Search paged visits (ADMIN)")
+    @CanSystemManage
+    @Operation(operationId = "findNavigationAuditVisits", summary = "Search paged visits as a system operator administrator")
     public ResponseEntity<NavigationAuditVisitPageResult> findVisits(@Valid @RequestBody(required = false) NavigationAuditVisitListQuery query) {
         return ResponseEntity.ok().header("Cache-Control", "no-store").body(queryService.findVisits(query));
     }

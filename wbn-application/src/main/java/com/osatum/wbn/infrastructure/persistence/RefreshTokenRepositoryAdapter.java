@@ -16,8 +16,8 @@ public class RefreshTokenRepositoryAdapter implements RefreshTokenRepository {
     private final RefreshTokenSpringDataRepository springData;
 
     @Override
-    public Optional<RefreshToken> findByTokenHash(String tokenHash) {
-        return springData.findByTokenHash(tokenHash);
+    public Optional<RefreshToken> findByTokenHashForUpdate(String tokenHash) {
+        return springData.findByTokenHashForUpdate(tokenHash);
     }
 
     @Override

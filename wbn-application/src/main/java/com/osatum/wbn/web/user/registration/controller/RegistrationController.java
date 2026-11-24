@@ -1,5 +1,6 @@
 package com.osatum.wbn.web.user.registration.controller;
 
+import com.osatum.wbn.application.security.PublicRequestRateLimiter;
 import com.osatum.wbn.application.user.dto.RegistrationActivationResultDto;
 import com.osatum.wbn.application.user.dto.RegistrationAvailabilityDto;
 import com.osatum.wbn.application.user.dto.RegistrationInstitutionDto;
@@ -19,7 +20,6 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -40,6 +40,7 @@ public class RegistrationController {
     private final RegistrationSubmitFormMapper registrationSubmitFormMapper;
     private final AccountActivationService accountActivationService;
     private final ClientRequestMetadataResolver requestMetadataResolver;
+    private final PublicRequestRateLimiter requestRateLimiter;
 
     @GetMapping("/institutions")
     @Operation(
@@ -78,15 +79,15 @@ public class RegistrationController {
     @PostMapping("/institutions/{id}/submit")
     @Operation(
             summary = "Wysłanie formularza rejestracyjnego",
-            description = "Rejestruje zgłoszenie użytkownika dla wybranej instytucji, zapisuje dane formularza oraz inicjuje dalszą obsługę aktywacji konta."
+            description = "Przyjmuje formularz dla wybranej instytucji. Wynik jest taki sam dla nowego i istniejącego konta."
     )
-    @ApiResponse(responseCode = "201", description = "Zgłoszenie rejestracyjne zostało utworzone",
+    @ApiResponse(responseCode = "202", description = "Przyjęto zgłoszenie do obsługi",
             content = @Content(mediaType = "application/json", schema = @Schema(implementation = RegistrationSubmitResultDto.class)))
     @ApiResponse(responseCode = "400", description = "Błąd walidacji formularza",
             content = @Content(mediaType = "application/json", schema = @Schema(implementation = ApiErrorResponse.class)))
     @ApiResponse(responseCode = "404", description = "Nie znaleziono instytucji",
             content = @Content(mediaType = "application/json", schema = @Schema(implementation = ApiErrorResponse.class)))
-    @ApiResponse(responseCode = "409", description = "Użytkownik o podanym adresie e-mail już istnieje",
+    @ApiResponse(responseCode = "429", description = "Limit zgłoszeń. Retry-After podaje czas oczekiwania w sekundach.",
             content = @Content(mediaType = "application/json", schema = @Schema(implementation = ApiErrorResponse.class)))
     public ResponseEntity<RegistrationSubmitResultDto> submitRegistration(
             @PathVariable(name = "id") Long id,
@@ -94,12 +95,14 @@ public class RegistrationController {
             HttpServletRequest request
     ) {
         var requestMetadata = requestMetadataResolver.resolve(request);
+        // Obserwacja IP ma własną transakcję, więc zapis pozostaje także po odrzuceniu zgłoszenia przez serwis.
+        requestRateLimiter.observeRegistrationIp(requestMetadata.ipAddress());
         RegistrationSubmitResultDto result = registrationSubmitService.submit(
                 registrationSubmitFormMapper.toDto(id, form),
                 requestMetadata.ipAddress(),
                 requestMetadata.userAgent()
         );
-        return ResponseEntity.status(HttpStatus.CREATED).body(result);
+        return ResponseEntity.accepted().body(result);
     }
 
     @PostMapping("/activation/{token}")

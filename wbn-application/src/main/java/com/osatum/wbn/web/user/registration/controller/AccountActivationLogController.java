@@ -1,5 +1,6 @@
 package com.osatum.wbn.web.user.registration.controller;
 
+import com.osatum.wbn.application.system.authorization.CanSystemManage;
 import com.osatum.wbn.application.user.dto.AccountActivationLogListDto;
 import com.osatum.wbn.application.user.query.AccountActivationLogListQuery;
 import com.osatum.wbn.application.user.service.AccountActivationLogService;
@@ -18,6 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 @Tag(name = "AccountActivations", description = "Przegląd zdarzeń aktywacji kont")
 @RestController
 @RequestMapping("/api/account-activations")
+@CanSystemManage
 @RequiredArgsConstructor
 public class AccountActivationLogController {
     private final AccountActivationLogService accountActivationLogService;

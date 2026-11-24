@@ -1,5 +1,6 @@
 package com.osatum.wbn.web.questionnaire.controller;
 
+import com.osatum.wbn.application.journal.authorization.CanJournalView;
 import com.osatum.wbn.application.questionnaire.service.QuestionnaireService;
 import com.osatum.wbn.application.questionnaire.view.QuestionnaireView;
 import com.osatum.wbn.application.report.survey.dto.SurveyReportResult;
@@ -27,6 +28,8 @@ import java.util.Optional;
 @RestController
 @RequestMapping("/api")
 @RequiredArgsConstructor
+@CanJournalView
+@ApiResponse(responseCode = "403", description = "Brak uprawnień do katalogu czasopism")
 @Tag(name = "Questionnaire", description = "Udostępnianie ankiet czasopism")
 public class QuestionnaireController {
 
